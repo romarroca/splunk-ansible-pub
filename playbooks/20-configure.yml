@@ -1,0 +1,128 @@
+---
+- name: Stage 20 - Splunk hardening and operations controls
+  hosts: splunk_instance
+  become: true
+
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart Splunkd
+      ansible.builtin.service:
+        name: "{{ splunk_service_name }}"
+        state: restarted
+      when: splunk_service_name | length > 0
+
+  tasks:
+    - name: Ensure Splunk boot-start is enabled
+      ansible.builtin.command: >-
+        {{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} --accept-license --answer-yes --no-prompt
+
+    - name: Reload systemd after boot-start enablement
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Detect Splunk systemd unit name
+      ansible.builtin.shell: |
+        systemctl list-unit-files --type=service --no-legend 2>/dev/null \
+        | awk 'tolower($1) ~ /^splunk.*\.service$/ {print $1; exit}'
+      args:
+        executable: /bin/bash
+      register: splunk_unit_detect
+      changed_when: false
+      failed_when: false
+
+    - name: Set Splunk service facts
+      ansible.builtin.set_fact:
+        splunk_service_unit: "{{ splunk_unit_detect.stdout | trim }}"
+        splunk_service_name: "{{ (splunk_unit_detect.stdout | trim) | regex_replace('\\.service$', '') }}"
+
+    - name: Configure file descriptor limits for Splunk
+      ansible.builtin.copy:
+        dest: /etc/security/limits.d/splunk.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {{ splunk_user }} hard nofile 65535
+          {{ splunk_user }} soft nofile 65535
+
+    - name: Ensure systemd override directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ splunk_service_name }}.service.d"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: splunk_service_name | length > 0
+
+    - name: Configure Splunkd systemd guardrails
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ splunk_service_name }}.service.d/override.conf"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Service]
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=65535
+      notify:
+        - Reload systemd
+        - Restart Splunkd
+      when: splunk_service_name | length > 0
+
+    - name: Install backup script
+      ansible.builtin.template:
+        src: ../templates/backup-splunk-etc.sh.j2
+        dest: /usr/local/sbin/backup-splunk-etc.sh
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Ensure backup directory is root-owned and restricted
+      ansible.builtin.file:
+        path: "{{ splunk_ops_root }}/backups"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Configure daily backup cron
+      ansible.builtin.cron:
+        name: "splunk etc backup"
+        minute: "{{ splunk_backup_cron_minute }}"
+        hour: "{{ splunk_backup_cron_hour }}"
+        user: root
+        job: "/usr/local/sbin/backup-splunk-etc.sh"
+
+    - name: Seed admin password (optional)
+      ansible.builtin.copy:
+        dest: "{{ splunk_home }}/etc/system/local/user-seed.conf"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0600"
+        content: |
+          [user_info]
+          USERNAME = admin
+          PASSWORD = {{ splunk_admin_password }}
+      when: splunk_admin_password | length > 0
+      no_log: true
+      notify: Restart Splunkd
+
+    - name: Ensure Splunkd service enabled and running
+      ansible.builtin.service:
+        name: "{{ splunk_service_name }}"
+        enabled: true
+        state: started
+      when: splunk_service_name | length > 0
+
+    - name: Ensure Splunk is running via CLI when no systemd unit is detected
+      ansible.builtin.command: >-
+        sudo -u {{ splunk_user }} {{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt
+      when: splunk_service_name | length == 0

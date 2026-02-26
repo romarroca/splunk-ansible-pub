@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+stamp="$(date +%F-%H%M%S)"
+backup_root="{{ splunk_ops_root }}/backups"
+src="{{ splunk_home }}/etc"
+out="${backup_root}/splunk-etc-${stamp}.tgz"
+
+mkdir -p "${backup_root}"
+chown root:root "${backup_root}"
+chmod 700 "${backup_root}"
+tar -C "{{ splunk_home }}" -czf "${out}" etc
+chmod 600 "${out}"
+
+find "${backup_root}" -type f -name 'splunk-etc-*.tgz' -mtime +{{ splunk_backup_retention_days }} -delete

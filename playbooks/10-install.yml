@@ -1,0 +1,112 @@
+---
+- name: Stage 10 - Splunk package install and service bootstrap
+  hosts: splunk_instance
+  become: true
+
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+
+  tasks:
+    - name: Ensure acl package is installed for become_user operations
+      ansible.builtin.apt:
+        name: acl
+        state: present
+
+    - name: Ensure splunk system group exists
+      ansible.builtin.group:
+        name: "{{ splunk_group }}"
+        system: true
+
+    - name: Ensure splunk service account exists
+      ansible.builtin.user:
+        name: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        shell: /usr/sbin/nologin
+        system: true
+        create_home: true
+
+    - name: Create required directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default(splunk_user) }}"
+        group: "{{ item.group | default(splunk_group) }}"
+        mode: "{{ item.mode | default('0755') }}"
+      loop:
+        - { path: "{{ splunk_home }}" }
+        - { path: "{{ splunk_ops_root }}" }
+        - { path: "{{ splunk_ops_root }}/etc" }
+        - { path: "{{ splunk_ops_root }}/var" }
+        - { path: "{{ splunk_ops_root }}/backups" }
+
+    - name: Download Splunk package
+      ansible.builtin.get_url:
+        url: "{{ splunk_download_url }}"
+        dest: "{{ splunk_download_dir }}/{{ splunk_package }}"
+        mode: "0644"
+
+    - name: Download Splunk SHA512 file
+      ansible.builtin.get_url:
+        url: "{{ splunk_sha512_url }}"
+        dest: "{{ splunk_download_dir }}/{{ splunk_package }}.sha512"
+        mode: "0644"
+
+    - name: Verify package checksum (SHA512)
+      ansible.builtin.shell: |
+        line="$(grep -F '{{ splunk_package }}' '{{ splunk_download_dir }}/{{ splunk_package }}.sha512' | head -n1)"
+        test -n "${line}"
+        expected="$(printf '%s\n' "${line}" | grep -Eio '[0-9a-f]{128}' | head -n1 | tr '[:upper:]' '[:lower:]')"
+        actual="$(sha512sum '{{ splunk_download_dir }}/{{ splunk_package }}' | awk '{print $1}' | tr '[:upper:]' '[:lower:]')"
+        test -n "${expected}"
+        test "${expected}" = "${actual}"
+      args:
+        executable: /bin/bash
+      register: checksum_verify
+      changed_when: false
+      failed_when: checksum_verify.rc != 0
+
+    - name: Install Splunk .deb package
+      ansible.builtin.apt:
+        deb: "{{ splunk_download_dir }}/{{ splunk_package }}"
+
+    - name: Enforce Splunk ownership on install and ops paths
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        recurse: true
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+      loop:
+        - "{{ splunk_home }}"
+        - "{{ splunk_ops_root }}"
+
+    - name: Check if first-start marker exists
+      ansible.builtin.stat:
+        path: "{{ splunk_home }}/etc/.first_start_done"
+      register: splunk_first_start_marker
+
+    - name: Perform secure first start
+      ansible.builtin.command: >-
+        {{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt
+      become_user: "{{ splunk_user }}"
+      when: not splunk_first_start_marker.stat.exists
+
+    - name: Write first-start marker
+      ansible.builtin.file:
+        path: "{{ splunk_home }}/etc/.first_start_done"
+        state: touch
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0644"
+      when: not splunk_first_start_marker.stat.exists
+
+    - name: Check if Splunkd systemd unit already exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/Splunkd.service
+      register: splunkd_unit
+
+    - name: Enable Splunk boot-start
+      ansible.builtin.command: >-
+        {{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} --accept-license --answer-yes --no-prompt
+      when: not splunkd_unit.stat.exists

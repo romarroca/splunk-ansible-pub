@@ -1,0 +1,131 @@
+---
+- name: Stage 90 - Post-deploy validation and reporting
+  hosts: splunk_instance
+  become: true
+
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+
+  tasks:
+    - name: Check Splunk status
+      ansible.builtin.command: sudo -u {{ splunk_user }} {{ splunk_home }}/bin/splunk status
+      register: check_splunk_status
+      changed_when: false
+      failed_when: false
+
+    - name: Check UFW rules
+      ansible.builtin.command: ufw status numbered
+      register: check_ufw
+      changed_when: false
+      failed_when: false
+
+    - name: Check core security services state
+      ansible.builtin.command: systemctl is-active ufw fail2ban auditd rsyslog cron
+      register: check_services
+      changed_when: false
+      failed_when: false
+
+    - name: Check Splunk unit files
+      ansible.builtin.shell: systemctl list-unit-files | grep -i splunk || true
+      args:
+        executable: /bin/bash
+      register: check_units
+      changed_when: false
+      failed_when: false
+
+    - name: Check active Splunk service status
+      ansible.builtin.shell: systemctl status Splunkd 2>/dev/null || systemctl status splunk 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      register: check_service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Check root backup cron entry
+      ansible.builtin.shell: crontab -l -u root | grep "splunk etc backup" || true
+      args:
+        executable: /bin/bash
+      register: check_cron
+      changed_when: false
+      failed_when: false
+
+    - name: Check backup directory contents
+      ansible.builtin.shell: ls -lah {{ splunk_ops_root }}/backups || true
+      args:
+        executable: /bin/bash
+      register: check_backups
+      changed_when: false
+      failed_when: false
+
+    - name: Check Splunk limits config
+      ansible.builtin.command: cat /etc/security/limits.d/splunk.conf
+      register: check_limits
+      changed_when: false
+      failed_when: false
+
+    - name: Check Splunk systemd override settings
+      ansible.builtin.shell: grep -R "LimitNOFILE\\|Restart=on-failure" /etc/systemd/system/*splunk*.service.d/override.conf 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      register: check_override
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure local reports directory exists
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../reports"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Write validation report per host
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}-validation.txt"
+        mode: "0644"
+        content: |
+          Splunk Validation Report
+          Host: {{ inventory_hostname }}
+          Generated: {{ ansible_date_time.iso8601 }}
+
+          [splunk status]
+          rc={{ check_splunk_status.rc }}
+          {{ check_splunk_status.stdout | default('') }}
+          {{ check_splunk_status.stderr | default('') }}
+
+          [ufw status]
+          rc={{ check_ufw.rc }}
+          {{ check_ufw.stdout | default('') }}
+
+          [security services]
+          rc={{ check_services.rc }}
+          {{ check_services.stdout | default('') }}
+
+          [splunk unit files]
+          rc={{ check_units.rc }}
+          {{ check_units.stdout | default('') }}
+
+          [splunk service status]
+          rc={{ check_service_status.rc }}
+          {{ check_service_status.stdout | default('') }}
+
+          [root cron]
+          rc={{ check_cron.rc }}
+          {{ check_cron.stdout | default('') }}
+
+          [backups]
+          rc={{ check_backups.rc }}
+          {{ check_backups.stdout | default('') }}
+
+          [limits]
+          rc={{ check_limits.rc }}
+          {{ check_limits.stdout | default('') }}
+
+          [systemd override]
+          rc={{ check_override.rc }}
+          {{ check_override.stdout | default('') }}
+      delegate_to: localhost
+      become: false
+

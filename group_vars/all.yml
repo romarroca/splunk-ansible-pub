@@ -1,0 +1,27 @@
+---
+# Splunk package settings
+splunk_version: "10.2.0"
+splunk_build: "d749cb17ea65"
+splunk_package: "splunk-{{ splunk_version }}-{{ splunk_build }}-linux-amd64.deb"
+splunk_download_url: "https://download.splunk.com/products/splunk/releases/{{ splunk_version }}/linux/{{ splunk_package }}"
+splunk_sha512_url: "{{ splunk_download_url }}.sha512"
+splunk_download_dir: "/tmp"
+splunk_user: "splunk"
+splunk_group: "splunk"
+
+# Paths
+splunk_home: "/opt/splunk"
+splunk_ops_root: "/srv/splunk"
+
+# Backup policy
+splunk_backup_retention_days: 14
+splunk_backup_cron_minute: "15"
+splunk_backup_cron_hour: "2"
+
+# Optional TLS deployment (set true and provide files in host_vars/group_vars)
+splunk_enable_tls_placeholders: false
+splunk_tls_cert_path: "/opt/splunk/etc/auth/splunkweb/cert.pem"
+splunk_tls_key_path: "/opt/splunk/etc/auth/splunkweb/key.pem"
+
+# Optional admin seed (store in ansible-vault, plain text; only used once)
+splunk_admin_password: ""

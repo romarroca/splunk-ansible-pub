@@ -1,0 +1,4 @@
+---
+- import_playbook: 00-prereqs.yml
+- import_playbook: 10-install.yml
+- import_playbook: 20-configure.yml

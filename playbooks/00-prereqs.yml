@@ -1,0 +1,135 @@
+---
+- name: Stage 00 - OS prerequisites and baseline hardening
+  hosts: splunk_instance
+  become: true
+
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+
+  vars:
+    prereq_packages:
+      - ufw
+      - cron
+      - curl
+      - wget
+      - ca-certificates
+      - gnupg
+      - iputils-ping
+      - iproute2
+      - net-tools
+      - dnsutils
+      - tcpdump
+      - traceroute
+      - nmap
+      - vim
+      - unattended-upgrades
+      - fail2ban
+      - auditd
+      - rsyslog
+
+  handlers:
+    - name: Reload ssh
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Upgrade installed packages
+      ansible.builtin.apt:
+        upgrade: dist
+
+    - name: Install prerequisite packages
+      ansible.builtin.apt:
+        name: "{{ prereq_packages }}"
+        state: present
+
+    - name: Enable unattended upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+
+    - name: Disable root SSH login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin\s+'
+        line: 'PermitRootLogin no'
+        create: false
+      notify: Reload ssh
+
+    - name: Allow SSH password auth for approved users
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication\s+'
+        line: 'PasswordAuthentication yes'
+        create: false
+      notify: Reload ssh
+
+    - name: Keep SSH public key auth enabled
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PubkeyAuthentication\s+'
+        line: 'PubkeyAuthentication yes'
+        create: false
+      notify: Reload ssh
+
+    - name: Ensure security services are enabled and running
+      ansible.builtin.service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - cron
+        - ufw
+        - fail2ban
+        - auditd
+        - rsyslog
+
+    - name: Set UFW default deny incoming
+      community.general.ufw:
+        direction: incoming
+        policy: deny
+
+    - name: Set UFW default allow outgoing
+      community.general.ufw:
+        direction: outgoing
+        policy: allow
+
+    - name: Allow SSH from any (multi-VLAN admins)
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Allow Splunk Web from any (multi-VLAN admins)
+      community.general.ufw:
+        rule: allow
+        port: "8000"
+        proto: tcp
+
+    - name: Remove any legacy allow rule for Splunk API (8089)
+      community.general.ufw:
+        delete: true
+        rule: allow
+        port: "8089"
+        proto: tcp
+
+    - name: Block external access to Splunk API (8089)
+      community.general.ufw:
+        rule: deny
+        port: "8089"
+        proto: tcp
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
