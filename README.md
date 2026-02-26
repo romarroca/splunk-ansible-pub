@@ -22,6 +22,7 @@ This project deploys Splunk in 3 stages:
 3. `20-configure.yml`
 - Runtime guardrails (`nofile`, restart policy)
 - Splunk service detection and startup handling
+- Splunk Web TLS enablement on port `8000` (self-signed by default)
 - Backup script deployment
 - Root cron backup schedule
 - Optional admin password seeding (`user-seed.conf`)
@@ -78,7 +79,10 @@ Set:
 - hostnames/IPs
 - `ansible_user`
 - Splunk version/build variables
+- TLS variables (`splunk_web_ssl_*`) if using custom certs
 - backup schedule values
+
+By default, this project enables Splunk Web SSL on `8000` and generates a self-signed certificate if no custom certificate is provided.
 
 ## Create `vault.yml` (required)
 

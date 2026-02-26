@@ -13,6 +13,7 @@
       - cron
       - curl
       - wget
+      - openssl
       - ca-certificates
       - gnupg
       - iputils-ping

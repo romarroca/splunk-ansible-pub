@@ -9,6 +9,14 @@ splunk_download_dir: "/tmp"
 splunk_user: "splunk"
 splunk_group: "splunk"
 
+# Splunk Web TLS (port 8000)
+splunk_web_ssl_enable: true
+splunk_web_ssl_self_signed: true
+splunk_web_ssl_cert_path: "{{ splunk_home }}/etc/auth/splunkweb/selfsigned-cert.pem"
+splunk_web_ssl_key_path: "{{ splunk_home }}/etc/auth/splunkweb/selfsigned-key.pem"
+splunk_web_ssl_common_name: "{{ inventory_hostname }}"
+splunk_web_ssl_days: 825
+
 # Paths
 splunk_home: "/opt/splunk"
 splunk_ops_root: "/srv/splunk"
@@ -17,11 +25,6 @@ splunk_ops_root: "/srv/splunk"
 splunk_backup_retention_days: 14
 splunk_backup_cron_minute: "15"
 splunk_backup_cron_hour: "2"
-
-# Optional TLS deployment (set true and provide files in host_vars/group_vars)
-splunk_enable_tls_placeholders: false
-splunk_tls_cert_path: "/opt/splunk/etc/auth/splunkweb/cert.pem"
-splunk_tls_key_path: "/opt/splunk/etc/auth/splunkweb/key.pem"
 
 # Optional admin seed (store in ansible-vault, plain text; only used once)
 splunk_admin_password: ""
