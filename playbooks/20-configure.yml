@@ -202,10 +202,11 @@
       notify: Restart Splunkd
 
     - name: Ensure Splunkd service enabled and running
-      ansible.builtin.service:
+      ansible.builtin.systemd:
         name: "{{ splunk_service_name }}"
         enabled: true
         state: started
+        daemon_reload: true
       when: splunk_service_name | length > 0
 
     - name: Ensure Splunk is running via CLI when no systemd unit is detected
