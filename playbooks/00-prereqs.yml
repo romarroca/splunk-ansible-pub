@@ -117,19 +117,6 @@
         port: "8000"
         proto: tcp
 
-    - name: Remove any legacy allow rule for Splunk API (8089)
-      community.general.ufw:
-        delete: true
-        rule: allow
-        port: "8089"
-        proto: tcp
-
-    - name: Block external access to Splunk API (8089)
-      community.general.ufw:
-        rule: deny
-        port: "8089"
-        proto: tcp
-
     - name: Enable UFW
       community.general.ufw:
         state: enabled

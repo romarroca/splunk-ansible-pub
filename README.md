@@ -51,6 +51,21 @@ Install collection:
 ansible-galaxy collection install community.general
 ```
 
+## Docker control node setup
+
+If running from a Docker Ubuntu container, install these packages inside the container:
+
+```bash
+apt update && apt install -y ansible python3 openssh-client sshpass git
+ansible-galaxy collection install community.general
+```
+
+Optional troubleshooting tools:
+
+```bash
+apt install -y iputils-ping dnsutils
+```
+
 ## Configure inventory
 
 Edit:
