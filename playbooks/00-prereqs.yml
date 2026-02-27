@@ -112,12 +112,6 @@
         port: "22"
         proto: tcp
 
-    - name: Allow Splunk Web from any (multi-VLAN admins)
-      community.general.ufw:
-        rule: allow
-        port: "8000"
-        proto: tcp
-
     - name: Enable UFW
       community.general.ufw:
         state: enabled
