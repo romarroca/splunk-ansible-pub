@@ -36,6 +36,62 @@
         state: reloaded
 
   tasks:
+    - name: Read configured DNS nameservers
+      ansible.builtin.shell: awk '/^nameserver/{print $2}' /etc/resolv.conf
+      args:
+        executable: /bin/bash
+      register: dns_nameservers_raw
+      changed_when: false
+
+    - name: Build DNS nameserver fact
+      ansible.builtin.set_fact:
+        dns_nameservers: "{{ dns_nameservers_raw.stdout_lines | map('trim') | reject('equalto', '') | list }}"
+
+    - name: Build expected DNS server list (dns_servers preferred)
+      ansible.builtin.set_fact:
+        expected_dns_servers_effective: "{{ dns_servers if (dns_servers | length > 0) else expected_dns_servers }}"
+
+    - name: Ensure at least one DNS nameserver is configured
+      ansible.builtin.assert:
+        that:
+          - dns_nameservers | length > 0
+        fail_msg: "No DNS nameserver found in /etc/resolv.conf"
+
+    - name: Ensure expected DNS nameservers are present (optional)
+      ansible.builtin.assert:
+        that:
+          - (expected_dns_servers_effective | difference(dns_nameservers)) | length == 0
+        fail_msg: >-
+          Missing expected DNS servers. expected={{ expected_dns_servers_effective }},
+          found={{ dns_nameservers }}
+      when: expected_dns_servers_effective | length > 0
+
+    - name: Check NTP synchronization state
+      ansible.builtin.command: timedatectl show -p NTPSynchronized --value
+      register: ntp_sync_state
+      changed_when: false
+
+    - name: Check active NTP server name
+      ansible.builtin.command: timedatectl show-timesync --property=ServerName --value
+      register: ntp_server_name
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure host is NTP synchronized
+      ansible.builtin.assert:
+        that:
+          - ntp_sync_state.stdout | trim == "yes"
+        fail_msg: "Host is not NTP synchronized (timedatectl NTPSynchronized != yes)"
+      when: require_ntp_sync | bool
+
+    - name: Ensure active NTP server is in expected list (optional)
+      ansible.builtin.assert:
+        that:
+          - ntp_server_name.stdout | trim in ntp_servers
+        fail_msg: >-
+          Active NTP server '{{ ntp_server_name.stdout | trim }}' not in expected list {{ ntp_servers }}
+      when: ntp_servers | length > 0
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true

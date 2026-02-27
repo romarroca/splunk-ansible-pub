@@ -9,13 +9,14 @@ splunk_download_dir: "/tmp"
 splunk_user: "splunk"
 splunk_group: "splunk"
 
-# Splunk Web TLS (port 8000)
-splunk_web_ssl_enable: true
-splunk_web_ssl_self_signed: true
-splunk_web_ssl_cert_path: "{{ splunk_home }}/etc/auth/splunkweb/selfsigned-cert.pem"
-splunk_web_ssl_key_path: "{{ splunk_home }}/etc/auth/splunkweb/selfsigned-key.pem"
-splunk_web_ssl_common_name: "{{ inventory_hostname }}"
-splunk_web_ssl_days: 825
+# Preflight baseline checks
+require_ntp_sync: true
+dns_servers:
+  - "10.10.10.10"
+  - "10.10.10.11"
+ntp_servers:
+  - "0.pool.ntp.org"
+  - "1.pool.ntp.org"
 
 # Paths
 splunk_home: "/opt/splunk"
