@@ -32,11 +32,11 @@ This project deploys Splunk in 3 stages:
 - `inventories/lab/hosts.yml`: target hosts/group (`splunk_instance`)
 - `group_vars/all.yml`: non-secret variables
 - `group_vars/vault.yml`: encrypted secrets (gitignored)
-- `playbooks/site.yml`: runs all stages in order
-- `playbooks/00-prereqs.yml`
-- `playbooks/10-install.yml`
-- `playbooks/20-configure.yml`
-- `playbooks/90-validate.yml`: post-deploy validation with per-host reports
+- `playbooks/base-install/site.yml`: runs base-install stages in order
+- `playbooks/base-install/00-prereqs.yml`
+- `playbooks/base-install/10-install.yml`
+- `playbooks/base-install/20-configure.yml`
+- `playbooks/base-install/90-validate.yml`: post-deploy validation with per-host reports
 - `templates/backup-splunk-etc.sh.j2`
 
 ## Prerequisites
@@ -112,15 +112,15 @@ Notes:
 Run all stages:
 
 ```bash
-ansible-playbook playbooks/site.yml --ask-vault-pass
+ansible-playbook playbooks/base-install/site.yml --ask-vault-pass
 ```
 
 Run stage by stage:
 
 ```bash
-ansible-playbook playbooks/00-prereqs.yml --ask-vault-pass
-ansible-playbook playbooks/10-install.yml --ask-vault-pass
-ansible-playbook playbooks/20-configure.yml --ask-vault-pass
+ansible-playbook playbooks/base-install/00-prereqs.yml --ask-vault-pass
+ansible-playbook playbooks/base-install/10-install.yml --ask-vault-pass
+ansible-playbook playbooks/base-install/20-configure.yml --ask-vault-pass
 ```
 
 ## Manual test (post-deploy)
@@ -141,7 +141,7 @@ ls -lah /srv/splunk/backups
 Run automated validation across the inventory:
 
 ```bash
-ansible-playbook playbooks/90-validate.yml --ask-vault-pass
+ansible-playbook playbooks/base-install/90-validate.yml --ask-vault-pass
 ```
 
 Reports are written per host to:

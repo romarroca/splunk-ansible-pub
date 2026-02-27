@@ -4,8 +4,8 @@
   become: true
 
   vars_files:
-    - ../group_vars/all.yml
-    - ../group_vars/vault.yml
+    - ../../group_vars/all.yml
+    - ../../group_vars/vault.yml
 
   vars:
     prereq_packages:
@@ -34,37 +34,93 @@
       ansible.builtin.service:
         name: ssh
         state: reloaded
+    - name: Restart systemd-resolved
+      ansible.builtin.service:
+        name: systemd-resolved
+        state: restarted
+        enabled: true
+    - name: Restart systemd-timesyncd
+      ansible.builtin.service:
+        name: systemd-timesyncd
+        state: restarted
+        enabled: true
 
   tasks:
-    - name: Read configured DNS nameservers
-      ansible.builtin.shell: awk '/^nameserver/{print $2}' /etc/resolv.conf
+    - name: Ensure systemd-resolved drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: dns_servers | length > 0
+
+    - name: Configure DNS servers for systemd-resolved
+      ansible.builtin.copy:
+        dest: /etc/systemd/resolved.conf.d/99-ansible-dns.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Resolve]
+          DNS={{ dns_servers | join(' ') }}
+      when: dns_servers | length > 0
+      notify: Restart systemd-resolved
+
+    - name: Ensure systemd-timesyncd drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/timesyncd.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: ntp_servers | length > 0
+
+    - name: Configure NTP servers for systemd-timesyncd
+      ansible.builtin.copy:
+        dest: /etc/systemd/timesyncd.conf.d/99-ansible-ntp.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Time]
+          NTP={{ ntp_servers | join(' ') }}
+      when: ntp_servers | length > 0
+      notify: Restart systemd-timesyncd
+
+    - name: Apply DNS/NTP configuration handlers before validation
+      ansible.builtin.meta: flush_handlers
+
+    - name: Read active DNS nameservers
+      ansible.builtin.shell: |
+        if command -v resolvectl >/dev/null 2>&1; then
+          resolvectl dns | awk '{for(i=2;i<=NF;i++) print $i}' | sort -u
+        else
+          awk '/^nameserver/{print $2}' /etc/resolv.conf
+        fi
       args:
         executable: /bin/bash
       register: dns_nameservers_raw
       changed_when: false
 
-    - name: Build DNS nameserver fact
+    - name: Build active DNS nameserver fact
       ansible.builtin.set_fact:
         dns_nameservers: "{{ dns_nameservers_raw.stdout_lines | map('trim') | reject('equalto', '') | list }}"
-
-    - name: Build expected DNS server list (dns_servers preferred)
-      ansible.builtin.set_fact:
-        expected_dns_servers_effective: "{{ dns_servers if (dns_servers | length > 0) else expected_dns_servers }}"
 
     - name: Ensure at least one DNS nameserver is configured
       ansible.builtin.assert:
         that:
           - dns_nameservers | length > 0
-        fail_msg: "No DNS nameserver found in /etc/resolv.conf"
+        fail_msg: "No active DNS nameserver found"
 
-    - name: Ensure expected DNS nameservers are present (optional)
+    - name: Ensure configured DNS nameservers are present
       ansible.builtin.assert:
         that:
-          - (expected_dns_servers_effective | difference(dns_nameservers)) | length == 0
+          - (dns_servers | difference(dns_nameservers)) | length == 0
         fail_msg: >-
-          Missing expected DNS servers. expected={{ expected_dns_servers_effective }},
+          Missing expected DNS servers. expected={{ dns_servers }},
           found={{ dns_nameservers }}
-      when: expected_dns_servers_effective | length > 0
+      when: dns_servers | length > 0
 
     - name: Check NTP synchronization state
       ansible.builtin.command: timedatectl show -p NTPSynchronized --value

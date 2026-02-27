@@ -4,8 +4,8 @@
   become: true
 
   vars_files:
-    - ../group_vars/all.yml
-    - ../group_vars/vault.yml
+    - ../../group_vars/all.yml
+    - ../../group_vars/vault.yml
 
   tasks:
     - name: Check Splunk status
@@ -74,7 +74,7 @@
 
     - name: Ensure local reports directory exists
       ansible.builtin.file:
-        path: "{{ playbook_dir }}/../reports"
+        path: "{{ playbook_dir }}/../../reports"
         state: directory
         mode: "0755"
       delegate_to: localhost
@@ -83,7 +83,7 @@
 
     - name: Write validation report per host
       ansible.builtin.copy:
-        dest: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}-validation.txt"
+        dest: "{{ playbook_dir }}/../../reports/{{ inventory_hostname }}-validation.txt"
         mode: "0644"
         content: |
           Splunk Validation Report
@@ -128,4 +128,3 @@
           {{ check_override.stdout | default('') }}
       delegate_to: localhost
       become: false
-
