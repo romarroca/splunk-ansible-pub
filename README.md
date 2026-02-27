@@ -53,17 +53,20 @@ ansible-galaxy collection install community.general
 
 ## Docker control node setup
 
-If running from a Docker Ubuntu container, install these packages inside the container:
+Build once:
 
 ```bash
-apt update && apt install -y ansible python3 openssh-client sshpass git
-ansible-galaxy collection install community.general
+docker build -t splunk-ansible-ctrl -f docker/ansible-controller.Dockerfile .
 ```
 
-Optional troubleshooting tools:
+Run controller container:
 
 ```bash
-apt install -y iputils-ping dnsutils
+cd /path/to/splunk-ansible
+docker run --rm -it --name ansible-ctrl \
+  -v "$(pwd)":/splunk-ansible \
+  -w /splunk-ansible \
+  splunk-ansible-ctrl
 ```
 
 ## Configure inventory
@@ -86,10 +89,10 @@ TLS customization for Splunk Web is intentionally not part of this base fleet in
 
 Create encrypted credentials file using this exact flow:
 
-`/work/ansible-splunk` should be your working directory before running these commands.
+`/splunk-ansible` should be your working directory before running these commands.
 
 ```bash
-cd /work/ansible-splunk
+cd /splunk-ansible
 cat > /tmp/vault-plain.yml <<'EOF'
 ansible_password: "StrongPassword"
 ansible_become_password: "StrongPassword"
